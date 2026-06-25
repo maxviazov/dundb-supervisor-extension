@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "D&B כרטיס לסופרוויזר",
+  "description": "חיפוש לפי ח.פ. מכל דף — משתמש בחיבור D&B הקיים בדפדפן",
+  "version": "1.3.4",
+  "action": {
+    "default_title": "כרטיס חברה לסופרוויזר",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "clipboardWrite", "tabs"],
+  "host_permissions": ["https://members.dundb.co.il/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://members.dundb.co.il/*"],
+      "js": ["page-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://members.dundb.co.il/*"],
+      "js": ["lib/utils.js", "lib/parser.js", "lib/api.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

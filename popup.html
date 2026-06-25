@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>כרטיס לסופרוויזר</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>כרטיס חברה לסופרוויזר</h1>
+        <p class="subtitle">חיפוש מכל דף — השאירו לשונית D&amp;B פתוחה (מזעור) אחרי התחברות</p>
+      </div>
+    </header>
+
+    <section class="search-panel">
+      <label for="hpInput">מספר ח.פ.</label>
+      <div class="search-row">
+        <input id="hpInput" type="text" inputmode="numeric" placeholder="לדוגמה: 516252415" />
+        <button id="searchBtn" type="button">חפש</button>
+      </div>
+      <button id="parsePageBtn" type="button" class="secondary-btn">קח מהדף הנוכחי</button>
+      <p id="status" class="status" aria-live="polite"></p>
+    </section>
+
+    <main id="card" class="card hidden"></main>
+
+    <template id="cardTemplate">
+      <div class="card-header">
+        <div>
+          <h2 class="company-name-he"></h2>
+          <p class="company-name-en"></p>
+        </div>
+        <span class="status-badge"></span>
+      </div>
+
+      <section class="contact-block">
+        <div class="contact-row"><span class="label">כתובת</span><span class="value address"></span></div>
+        <div class="contact-row"><span class="label">טלפון</span><span class="value phones"></span></div>
+        <div class="contact-row"><span class="label">אימייל</span><span class="value email"></span></div>
+        <div class="contact-row"><span class="label">אתר אינטרנט</span><a class="value website" target="_blank" rel="noopener"></a></div>
+      </section>
+
+      <section class="metrics">
+        <div class="metric score-metric">
+          <div class="metric-title">סקור ענפי</div>
+          <div class="metric-value score-value"></div>
+          <div class="metric-note score-warning"></div>
+        </div>
+        <div class="metric">
+          <div class="metric-title">ותק עסק</div>
+          <div class="metric-value seniority-value"></div>
+          <div class="metric-note seniority-note"></div>
+        </div>
+        <div class="metric">
+          <div class="metric-title">מספר מועסקים</div>
+          <div class="metric-value employees-value"></div>
+          <div class="metric-note">על פי הערכה</div>
+        </div>
+      </section>
+
+      <section class="basic-data">
+        <h3>נתונים עסקיים</h3>
+        <div class="data-grid">
+          <div><span>מספר רישום</span><strong class="reg-number"></strong></div>
+          <div><span>מעמד משפטי</span><strong class="legal-status"></strong></div>
+          <div><span>מגזר</span><strong class="sector"></strong></div>
+          <div><span>אופי פעילות</span><strong class="activity"></strong></div>
+          <div><span>ענף ראשי</span><strong class="main-industry"></strong></div>
+          <div><span>ענף משני</span><strong class="sub-industry"></strong></div>
+        </div>
+      </section>
+
+      <section class="rating-scale">
+        <h3>סרגל הדירוג</h3>
+        <div class="scale-labels">
+          <span class="scale-zone zone-2">85-53</span><span class="scale-zone zone-3">52-16</span><span class="scale-zone zone-4">15-0</span>
+        </div>
+        <div class="scale-bar"><div class="scale-marker hidden"></div></div>
+        <div class="scale-grades"><span>2</span><span>3</span><span>4</span></div>
+        <div class="scale-grade-label hidden"></div>
+      </section>
+
+      <div class="actions">
+        <button type="button" class="image-btn">העתק תמונה — הדבק בוואטסאפ</button>
+        <button type="button" class="download-btn secondary-btn">הורד קובץ PNG</button>
+        <button type="button" class="copy-btn secondary-btn">העתק טקסט (לא תמונה)</button>
+        <button type="button" class="open-btn secondary-btn">פתח באתר D&amp;B</button>
+      </div>
+    </template>
+
+    <script src="lib/utils.js"></script>
+    <script src="lib/parser.js"></script>
+    <script src="lib/card-image.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
