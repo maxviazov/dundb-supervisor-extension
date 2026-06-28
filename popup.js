@@ -57,7 +57,11 @@ function renderCard(data) {
 
   node.querySelector(".company-name-he").textContent = displayValue(data.nameHe, "שם חברה לא זמין");
   node.querySelector(".company-name-en").textContent = displayValue(data.nameEn, "");
-  node.querySelector(".status-badge").textContent = displayValue(data.status, "פעילה");
+  const statusMeta = DundbUtils.getStatusMeta(data.status);
+  const badgeEl = node.querySelector(".status-badge");
+  badgeEl.textContent = statusMeta.label;
+  badgeEl.classList.toggle("status-badge-inactive", statusMeta.isInactive);
+  badgeEl.classList.toggle("status-badge-active", statusMeta.isActive);
 
   node.querySelector(".address").textContent = displayValue(data.address);
   node.querySelector(".phones").textContent = (data.phones || []).join(" | ") || "—";

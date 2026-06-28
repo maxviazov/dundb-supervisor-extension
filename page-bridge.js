@@ -155,12 +155,35 @@
     return findIndustryScoreLive();
   }
 
+  function findLiveActivityStatus() {
+    const header = document.querySelector(".company_name, .company_name_print, #CompanyName");
+    const scope = header
+      ? header.closest(".innerinformation, #content, table, .CompDetails, [class*='company']") ||
+        header.parentElement?.parentElement ||
+        document
+      : document;
+
+    for (const el of scope.querySelectorAll("span, div, label, b, strong, td, p, font")) {
+      const t = textOf(el);
+      if (t === "לא פעילה" || t === "לא פעיל") return t;
+      if (/^לא\s*פעיל/i.test(t) && t.length <= 24) {
+        return /לא\s*פעילה/i.test(t) ? "לא פעילה" : "לא פעיל";
+      }
+    }
+
+    return "";
+  }
+
   async function readLiveCompanyExtras() {
     if (!/\/CompanyDetails\//i.test(location.pathname || "")) return {};
 
     const extras = {};
     const score = await waitForIndustryScore();
     if (score) extras.score = score;
+
+    const status = findLiveActivityStatus();
+    if (status) extras.status = status;
+
     return extras;
   }
 
