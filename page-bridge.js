@@ -80,49 +80,86 @@
 
   function findIndustryScoreLive() {
     const titleEl = Array.from(
-      document.querySelectorAll("div, span, td, th, label, p, b, strong")
-    ).find((el) => textOf(el) === "סקור ענפי" || textOf(el).includes("סקור ענפי"));
+      document.querySelectorAll("div, span, td, th, label, p, b, strong, font")
+    ).find((el) => {
+      const t = textOf(el);
+      return t === "סקור ענפי" || (t.includes("סקור ענפי") && t.length <= 20);
+    });
 
     if (!titleEl) return "";
 
-    let box = titleEl.parentElement;
-    for (let depth = 0; depth < 10 && box; depth++, box = box.parentElement) {
-      const boxText = textOf(box);
-      if (!boxText.includes("סקור ענפי")) continue;
-      if (/ותק עסק|מספר מועסקים/.test(boxText) && boxText.indexOf("סקור ענפי") > 40) continue;
-      if (boxText.length > 280) continue;
-
-      const scoreEl = box.querySelector(".scorenumber");
-      if (scoreEl) {
-        const digits = textOf(scoreEl).replace(/[^\d]/g, "");
-        const n = Number(digits);
-        if (n >= 1 && n <= 100) return String(n);
+    let node = titleEl;
+    const otherTitles = ["ותק עסק", "מספר מועסקים"];
+    for (let depth = 0; depth < 10 && node; depth++) {
+      const boxText = textOf(node);
+      if (!boxText.includes("סקור ענפי")) {
+        node = node.parentElement;
+        continue;
       }
 
-      for (const el of box.querySelectorAll("span, div, b, strong, font, p")) {
-        const t = textOf(el);
-        if (/^\d{1,3}$/.test(t)) {
-          const n = Number(t);
-          if (n >= 10 && n <= 100) return String(n);
+      const hasOther = otherTitles.some((o) => boxText.includes(o));
+      if (hasOther) {
+        for (const child of node.children) {
+          if (!child.contains(titleEl)) continue;
+          const ct = textOf(child);
+          if (!ct.includes("סקור ענפי") || otherTitles.some((o) => ct.includes(o))) continue;
+          return extractScoreFromLiveBlock(child);
         }
+        node = node.parentElement;
+        continue;
       }
 
-      const after = boxText.split("סקור ענפי").slice(1).join("");
-      const nums = after.replace(/\([^)]*\)/g, " ").match(/\b(\d{1,3})\b/g) || [];
-      for (const num of nums) {
-        const n = Number(num);
-        if (n >= 10 && n <= 100) return String(n);
-      }
+      return extractScoreFromLiveBlock(node);
     }
 
     return "";
   }
 
-  function readLiveCompanyExtras() {
+  function extractScoreFromLiveBlock(block) {
+    const scoreEl = block.querySelector(".scorenumber");
+    if (scoreEl) {
+      const digits = textOf(scoreEl).replace(/[^\d]/g, "");
+      const n = Number(digits);
+      if (n >= 1 && n <= 100) return String(n);
+    }
+
+    for (const el of block.querySelectorAll("span, div, b, strong, font, p, td")) {
+      const t = textOf(el);
+      if (/^\d{1,3}$/.test(t)) {
+        const n = Number(t);
+        if (n >= 10 && n <= 100) return String(n);
+      }
+    }
+
+    const boxText = textOf(block);
+    const after = boxText.split("סקור ענפי").slice(1).join("");
+    const nums = after.replace(/\([^)]*\)/g, " ").match(/\b(\d{1,3})\b/g) || [];
+    for (const num of nums) {
+      const n = Number(num);
+      if (n >= 10 && n <= 100) return String(num);
+    }
+    return "";
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function waitForIndustryScore(maxMs = 5000) {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      const score = findIndustryScoreLive();
+      if (score) return score;
+      await sleep(250);
+    }
+    return findIndustryScoreLive();
+  }
+
+  async function readLiveCompanyExtras() {
     if (!/\/CompanyDetails\//i.test(location.pathname || "")) return {};
 
     const extras = {};
-    const score = findIndustryScoreLive();
+    const score = await waitForIndustryScore();
     if (score) extras.score = score;
     return extras;
   }
@@ -174,7 +211,7 @@
       return {
         indexHtml,
         fullHtml,
-        liveExtras: readLiveCompanyExtras(),
+        liveExtras: await readLiveCompanyExtras(),
       };
     }
 
