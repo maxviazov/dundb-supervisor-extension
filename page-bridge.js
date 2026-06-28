@@ -67,21 +67,14 @@
     if (!/\/CompanyDetails\//i.test(location.pathname || "")) return {};
     if (!String(location.search || "").includes(String(duns))) return {};
 
-    const scoreEl = document.querySelector(
-      "#compDetailsDunsScore .scorenumber, .score-metric .scorenumber, .scorenumber"
-    );
-    const employeesEl = document.querySelector("[id*='Employee'], [class*='employee']");
-    const seniorityEl = document.querySelector("[id*='Seniority'], [class*='seniority']");
-
     const extras = {};
+    const scoreEl = document.querySelector(
+      "#compDetailsDunsScore .scorenumber, .score-metric .scorenumber"
+    );
     const scoreText = scoreEl ? (scoreEl.textContent || "").replace(/[^\d]/g, "") : "";
-    if (scoreText) extras.score = scoreText;
-
-    const employeesText = employeesEl ? (employeesEl.textContent || "").trim() : "";
-    if (employeesText && /\d/.test(employeesText)) extras.employees = employeesText;
-
-    const seniorityText = seniorityEl ? (seniorityEl.textContent || "").trim() : "";
-    if (seniorityText && /\d/.test(seniorityText)) extras.seniorityText = seniorityText;
+    if (scoreText && Number(scoreText) >= 1 && Number(scoreText) <= 100) {
+      extras.score = scoreText;
+    }
 
     return extras;
   }
