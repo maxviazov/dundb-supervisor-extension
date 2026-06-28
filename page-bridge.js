@@ -12,6 +12,18 @@
     return num;
   }
 
+  function cleanText(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .replace(/\u00a0/g, " ")
+      .trim();
+  }
+
+  function textOf(el) {
+    if (!el) return "";
+    return cleanText(el.textContent || el.innerText || "");
+  }
+
   function requireJQuery() {
     if (typeof window.jQuery === "undefined") {
       throw new Error("הדף עדיין נטען — רעננו את לשונית D&B ונסו שוב");
@@ -66,19 +78,52 @@
     });
   }
 
-  function readLiveCompanyExtras(duns) {
-    if (!/\/CompanyDetails\//i.test(location.pathname || "")) return {};
-    if (!String(location.search || "").includes(String(duns))) return {};
+  function findIndustryScoreLive() {
+    const titleEl = Array.from(
+      document.querySelectorAll("div, span, td, th, label, p, b, strong")
+    ).find((el) => textOf(el) === "סקור ענפי" || textOf(el).includes("סקור ענפי"));
 
-    const extras = {};
-    const scoreEl = document.querySelector(
-      "#compDetailsDunsScore .scorenumber, .score-metric .scorenumber"
-    );
-    const scoreText = scoreEl ? (scoreEl.textContent || "").replace(/[^\d]/g, "") : "";
-    if (scoreText && Number(scoreText) >= 1 && Number(scoreText) <= 100) {
-      extras.score = scoreText;
+    if (!titleEl) return "";
+
+    let box = titleEl.parentElement;
+    for (let depth = 0; depth < 10 && box; depth++, box = box.parentElement) {
+      const boxText = textOf(box);
+      if (!boxText.includes("סקור ענפי")) continue;
+      if (/ותק עסק|מספר מועסקים/.test(boxText) && boxText.indexOf("סקור ענפי") > 40) continue;
+      if (boxText.length > 280) continue;
+
+      const scoreEl = box.querySelector(".scorenumber");
+      if (scoreEl) {
+        const digits = textOf(scoreEl).replace(/[^\d]/g, "");
+        const n = Number(digits);
+        if (n >= 1 && n <= 100) return String(n);
+      }
+
+      for (const el of box.querySelectorAll("span, div, b, strong, font, p")) {
+        const t = textOf(el);
+        if (/^\d{1,3}$/.test(t)) {
+          const n = Number(t);
+          if (n >= 10 && n <= 100) return String(n);
+        }
+      }
+
+      const after = boxText.split("סקור ענפי").slice(1).join("");
+      const nums = after.replace(/\([^)]*\)/g, " ").match(/\b(\d{1,3})\b/g) || [];
+      for (const num of nums) {
+        const n = Number(num);
+        if (n >= 10 && n <= 100) return String(n);
+      }
     }
 
+    return "";
+  }
+
+  function readLiveCompanyExtras() {
+    if (!/\/CompanyDetails\//i.test(location.pathname || "")) return {};
+
+    const extras = {};
+    const score = findIndustryScoreLive();
+    if (score) extras.score = score;
     return extras;
   }
 
@@ -129,7 +174,7 @@
       return {
         indexHtml,
         fullHtml,
-        liveExtras: readLiveCompanyExtras(data.duns),
+        liveExtras: readLiveCompanyExtras(),
       };
     }
 
