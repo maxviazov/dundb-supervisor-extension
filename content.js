@@ -1,4 +1,7 @@
 (function () {
+  if (globalThis.__dundbSupervisorContent) return;
+  globalThis.__dundbSupervisorContent = true;
+
   if (!DundbApi.isOnSite()) return;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

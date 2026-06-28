@@ -33,16 +33,43 @@ async function pingTab(tabId) {
   return chrome.tabs.sendMessage(tabId, { type: "PING" });
 }
 
-async function waitForContentScript(tabId, attempts = 15) {
+async function injectContentScripts(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["page-bridge.js"],
+    world: "MAIN",
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["lib/utils.js", "lib/parser.js", "lib/api.js", "content.js"],
+  });
+}
+
+async function waitForContentScript(tabId, attempts = 20) {
+  let injected = false;
+
   for (let i = 0; i < attempts; i++) {
     try {
       const response = await pingTab(tabId);
       if (response?.ok) return response;
     } catch {
+      if (!injected && i >= 1) {
+        try {
+          await injectContentScripts(tabId);
+          injected = true;
+          await sleep(400);
+          continue;
+        } catch {
+          // injection blocked — fall through to retry / final error
+        }
+      }
       await sleep(300);
     }
   }
-  throw new Error("רעננו את לשונית members.dundb.co.il ונסו שוב");
+
+  throw new Error(
+    "לא ניתן להתחבר ללשונית D&B — רעננו אותה (F5) או פתחו members.dundb.co.il מחדש"
+  );
 }
 
 async function ensureDundbTab() {
@@ -113,16 +140,13 @@ async function getStatus() {
 
 async function parseFromBestTab() {
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (active?.url?.includes("members.dundb.co.il") && isLoggedInUrl(active.url)) {
+  if (active?.id && active.url?.includes("members.dundb.co.il") && isLoggedInUrl(active.url)) {
     return sendToDundbOnTab(active.id, { type: "PARSE_CURRENT_PAGE" });
   }
 
-  const tabs = await getDundbTabs();
-  const companyTab = tabs.find(
-    (t) => isLoggedInUrl(t.url) && /\/CompanyDetails\//i.test(t.url || "")
-  );
-  if (companyTab?.id) {
-    return sendToDundbOnTab(companyTab.id, { type: "PARSE_CURRENT_PAGE" });
+  const tab = pickBestTab(await getDundbTabs());
+  if (tab?.id && isLoggedInUrl(tab.url)) {
+    return sendToDundbOnTab(tab.id, { type: "PARSE_CURRENT_PAGE" });
   }
 
   throw new Error("פתחו כרטיס חברה ב-members.dundb.co.il");

@@ -1,4 +1,7 @@
 (function () {
+  if (window.__dundbSupervisorBridge) return;
+  window.__dundbSupervisorBridge = true;
+
   const MSG_SOURCE = "dundb-supervisor";
   const MSG_RESPONSE = "dundb-supervisor-response";
 
