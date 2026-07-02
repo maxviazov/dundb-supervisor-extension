@@ -57,24 +57,55 @@
       type: "POST",
       data: postData,
       dataType: "json",
+      cache: false,
+    });
+  }
+
+  function loadCompanyInfo(duns) {
+    const $ = requireJQuery();
+    const bust = Date.now();
+    return $.ajax({
+      url:
+        "/CompanyDetails/Info?duns=" +
+        encodeURIComponent(duns) +
+        "&_=" +
+        bust,
+      type: "GET",
+      dataType: "html",
+      cache: false,
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
     });
   }
 
   function loadCompanyIndex(duns) {
     const $ = requireJQuery();
+    const bust = Date.now();
     return $.ajax({
-      url: "/CompanyDetails/Index?duns=" + encodeURIComponent(duns),
+      url:
+        "/CompanyDetails/Index?duns=" +
+        encodeURIComponent(duns) +
+        "&_=" +
+        bust,
       type: "GET",
       dataType: "html",
+      cache: false,
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
     });
   }
 
   function loadCompanyFullDetails(duns) {
     const $ = requireJQuery();
+    const bust = Date.now();
     return $.ajax({
-      url: "/CompanyDetails/FullDetails?duns=" + encodeURIComponent(duns),
+      url:
+        "/CompanyDetails/FullDetails?duns=" +
+        encodeURIComponent(duns) +
+        "&_=" +
+        bust,
       type: "GET",
       dataType: "html",
+      cache: false,
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
     });
   }
 
@@ -174,8 +205,26 @@
     return "";
   }
 
-  async function readLiveCompanyExtras() {
+  function livePageMatchesCompany(duns, regNumber) {
+    if (!regNumber) return false;
+
+    const pageText = document.body?.innerText || "";
+    const regMatch = pageText.match(/מספר\s*רישום[^\d]*(\d{5,9})/i);
+    if (regMatch && completeReginNum(regMatch[1]) === completeReginNum(regNumber)) {
+      return true;
+    }
+
+    const dunsMatch = location.search.match(/[?&]duns=([^&]+)/i);
+    if (dunsMatch && duns) {
+      return decodeURIComponent(dunsMatch[1]) === duns;
+    }
+
+    return false;
+  }
+
+  async function readLiveCompanyExtras(duns, regNumber) {
     if (!/\/CompanyDetails\//i.test(location.pathname || "")) return {};
+    if (!livePageMatchesCompany(duns, regNumber)) return {};
 
     const extras = {};
     const score = await waitForIndustryScore();
@@ -211,14 +260,61 @@
       return html;
     }
 
+    if (data.type === "READ_LIVE_EXTRAS") {
+      if (!data.duns) throw new Error("חסר מזהה חברה");
+      return readLiveCompanyExtras(data.duns, data.regNumber || "");
+    }
+
     if (data.type === "LOAD_COMPANY_PAGES") {
       if (!data.duns) throw new Error("חסר מזהה חברה");
-      const indexHtml = await loadCompanyIndex(data.duns);
+      const regNumber = data.regNumber || "";
+
+      if (regNumber) {
+        await searchWithJQuery(completeReginNum(regNumber));
+      }
+
+      if (data.fastMode) {
+        const [infoHtml, fullHtml] = await Promise.all([
+          loadCompanyInfo(data.duns).catch(() => ""),
+          loadCompanyFullDetails(data.duns).catch(() => ""),
+        ]);
+
+        if (typeof infoHtml === "string" && isLoginHtml(infoHtml)) {
+          throw new Error("הסשן של D&B פג — התחברו מחדש בלשונית הפתוחה");
+        }
+
+        const cleanFull =
+          typeof fullHtml === "string" &&
+          !isLoginHtml(fullHtml) &&
+          !/Content-Type.*javascript/i.test(fullHtml)
+            ? fullHtml
+            : "";
+
+        return {
+          indexHtml: infoHtml || "",
+          fullHtml: cleanFull,
+          liveExtras: {},
+        };
+      }
+
+      let indexHtml = "";
+      let infoHtml = "";
+      let fullHtml = "";
+
+      try {
+        infoHtml = await loadCompanyInfo(data.duns);
+        if (typeof infoHtml === "string" && isLoginHtml(infoHtml)) {
+          infoHtml = "";
+        }
+      } catch {
+        infoHtml = "";
+      }
+
+      indexHtml = await loadCompanyIndex(data.duns);
       if (typeof indexHtml === "string" && isLoginHtml(indexHtml)) {
         throw new Error("הסשן של D&B פג — התחברו מחדש בלשונית הפתוחה");
       }
 
-      let fullHtml = "";
       try {
         fullHtml = await loadCompanyFullDetails(data.duns);
         if (
@@ -232,9 +328,9 @@
       }
 
       return {
-        indexHtml,
+        indexHtml: infoHtml || indexHtml,
         fullHtml,
-        liveExtras: await readLiveCompanyExtras(),
+        liveExtras: await readLiveCompanyExtras(data.duns, regNumber),
       };
     }
 

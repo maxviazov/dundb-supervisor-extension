@@ -72,13 +72,51 @@ async function waitForContentScript(tabId, attempts = 20) {
   );
 }
 
+async function wakeDundbTab(tab) {
+  if (!tab?.id) return tab;
+
+  try {
+    await chrome.tabs.update(tab.id, { autoDiscardable: false });
+  } catch {
+    // optional — ignore if unsupported
+  }
+
+  if (tab.discarded) {
+    await chrome.tabs.reload(tab.id, { bypassCache: true });
+    await waitTabLoaded(tab.id);
+    await sleep(800);
+    const refreshed = await chrome.tabs.get(tab.id);
+    return refreshed;
+  }
+
+  return tab;
+}
+
+async function isTabVisible(tabId) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.discarded) return false;
+
+    const windows = await chrome.windows.getAll({ populate: true });
+    for (const win of windows) {
+      const activeTab = win.tabs?.find((t) => t.active);
+      if (activeTab?.id === tabId) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureDundbTab() {
-  const tab = pickBestTab(await getDundbTabs());
+  let tab = pickBestTab(await getDundbTabs());
   if (!tab?.id) {
     throw new Error(
       "פתחו members.dundb.co.il והתחברו פעם אחת. השאירו לשונית פתוחה (אפשר מזעור) — בלי זה הסשן יתאפס."
     );
   }
+
+  tab = await wakeDundbTab(tab);
 
   if (!isLoggedInUrl(tab.url)) {
     throw new Error("התחברו ל-D&B בלשונית הפתוחה ואז נסו שוב");
@@ -161,6 +199,144 @@ async function sendToDundbOnTab(tabId, message) {
   return response;
 }
 
+async function waitTabLoaded(tabId, timeoutMs = 20000) {
+  const tab = await chrome.tabs.get(tabId);
+  if (tab.status === "complete") return;
+
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      reject(new Error("תם הזמן בטעינת כרטיס החברה"));
+    }, timeoutMs);
+
+    function onUpdated(updatedTabId, info) {
+      if (updatedTabId !== tabId || info.status !== "complete") return;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve();
+    }
+
+    chrome.tabs.onUpdated.addListener(onUpdated);
+  });
+}
+
+function tabUrlHasDuns(url, duns) {
+  if (!url || !duns) return false;
+  const match = url.match(/[?&]duns=([^&]+)/i);
+  return match && decodeURIComponent(match[1]) === String(duns);
+}
+
+async function tabDomReady(tabId, duns, regNumber) {
+  try {
+    const check = await chrome.tabs.sendMessage(tabId, {
+      type: "CHECK_COMPANY_READY",
+      regNumber,
+      duns,
+    });
+    return !!(check?.ok && check.ready);
+  } catch {
+    return false;
+  }
+}
+
+async function ensureCompanyTabReady(tabId, duns, regNumber, options = {}) {
+  if (!duns) return null;
+
+  let tab = await wakeDundbTab(await chrome.tabs.get(tabId));
+  const urlOk = tabUrlHasDuns(tab.url, duns);
+  const domOk = urlOk && (await tabDomReady(tab.id, duns, regNumber));
+
+  if (domOk && !options.forceReload) return tab;
+
+  if (urlOk && !options.forceReload) {
+    await chrome.tabs.reload(tab.id, { bypassCache: true });
+  } else {
+    const targetUrl = `${DUNDB_ORIGIN}/CompanyDetails/Info?duns=${encodeURIComponent(duns)}&_=${Date.now()}`;
+    await chrome.tabs.update(tab.id, { url: targetUrl });
+  }
+
+  await waitTabLoaded(tab.id);
+  await sleep(400);
+  await waitForContentScript(tab.id);
+
+  if (await isTabVisible(tab.id)) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      if (await tabDomReady(tab.id, duns, regNumber)) break;
+      await sleep(300);
+    }
+  }
+
+  return tab;
+}
+
+function isCompanyDataComplete(data) {
+  if (!data?.nameHe?.trim()) return false;
+  const scoreDigits = String(data.score || "").replace(/[^\d]/g, "");
+  return scoreDigits.length > 0 && Number(scoreDigits) >= 1;
+}
+
+async function loadCompanyDetailsOnTab(tab, company, regisNumber, options = {}) {
+  await waitForContentScript(tab.id);
+  const loadRes = await chrome.tabs.sendMessage(tab.id, {
+    type: "LOAD_COMPANY_DETAILS",
+    company: {
+      ...company,
+      regNumber: company.regNumber || regisNumber,
+    },
+    regisNumber,
+    backgroundMode: !!options.backgroundMode,
+    fastMode: !!options.fastMode,
+  });
+  if (!loadRes?.ok) {
+    throw new Error(loadRes?.error || "שגיאה בטעינת פרטי חברה");
+  }
+  return loadRes;
+}
+
+async function lookupCompanyByRegis(regNumber) {
+  let tab = await ensureDundbTab();
+  const visible = await isTabVisible(tab.id);
+
+  const searchRes = await chrome.tabs.sendMessage(tab.id, {
+    type: "SEARCH_HP_ONLY",
+    regNumber,
+  });
+  if (!searchRes?.ok) {
+    throw new Error(searchRes?.error || "שגיאה בחיפוש");
+  }
+
+  const { company, regisNumber } = searchRes.data;
+  if (!company?.duns) {
+    throw new Error("לא נמצאה חברה עם מספר ח.פ. זה");
+  }
+
+  const wasReady =
+    tabUrlHasDuns(tab.url, company.duns) &&
+    (await tabDomReady(tab.id, company.duns, regisNumber));
+
+  if (!wasReady) {
+    tab = await ensureCompanyTabReady(tab.id, company.duns, regisNumber);
+  }
+
+  const backgroundMode = !visible;
+  let response = await loadCompanyDetailsOnTab(tab, company, regisNumber, {
+    backgroundMode,
+    fastMode: wasReady && backgroundMode,
+  });
+
+  if (!isCompanyDataComplete(response.data)) {
+    tab = await ensureCompanyTabReady(tab.id, company.duns, regisNumber, {
+      forceReload: true,
+    });
+    response = await loadCompanyDetailsOnTab(tab, company, regisNumber, {
+      backgroundMode: true,
+      fastMode: false,
+    });
+  }
+
+  return response;
+}
+
 async function openCompanyOnDundb(duns) {
   const url = duns
     ? `${DUNDB_ORIGIN}/CompanyDetails/Index?duns=${encodeURIComponent(duns)}`
@@ -189,10 +365,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
       if (message.type === "LOOKUP_HP") {
-        const response = await sendToDundb({
-          type: "LOOKUP_HP",
-          regNumber: message.regNumber,
-        });
+        const response = await queueRequest(() => lookupCompanyByRegis(message.regNumber));
         sendResponse(response);
         return;
       }

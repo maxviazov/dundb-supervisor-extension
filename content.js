@@ -14,6 +14,31 @@
           sendResponse({ ok: true, data });
           return;
         }
+        if (message.type === "SEARCH_HP_ONLY") {
+          const data = await DundbApi.searchByRegis(message.regNumber);
+          sendResponse({ ok: true, data });
+          return;
+        }
+        if (message.type === "LOAD_COMPANY_DETAILS") {
+          const data = await DundbApi.loadCompanyDetails(
+            message.company,
+            message.regisNumber,
+            {
+              backgroundMode: !!message.backgroundMode,
+              fastMode: !!message.fastMode,
+            }
+          );
+          sendResponse({ ok: true, data });
+          return;
+        }
+        if (message.type === "CHECK_COMPANY_READY") {
+          const ready = DundbApi.isCompanyPageReady(
+            message.regNumber,
+            message.duns
+          );
+          sendResponse({ ok: true, ready });
+          return;
+        }
         if (message.type === "PARSE_CURRENT_PAGE") {
           const data = await DundbApi.parseCurrentPage();
           sendResponse({ ok: true, data });
